@@ -1,2 +1,3 @@
-var button = require('./driver.js');
-button.listen();
+var BigRedButtonConstructor = require('./driver.js');
+var button = new BigRedButtonConstructor();
+//button.listen();

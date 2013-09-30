@@ -33,48 +33,62 @@
       NUM: 0
     }
   };
-  console.log('Hello?');
 
-  var usb = require('usb/usb.js');
+  var util = require('util');
+  var events = require('events');
+  var HID = require('node-hid');
 
-  var the_button = usb.findByIds(DEVICE.ID.VENDOR, DEVICE.ID.PRODUCT);
+  function BigRedButtonController(index)
+  {
+    if (!arguments.length) {
+      index = 0;
+    }
 
-  if (!the_button) {
-    throw 'Big Red Button not found - make sure your Dream Cheeky button is plugged in to a USB port';
-  }
-  console.log('Hello?');
+    var controllers = HID.devices(DEVICE.ID.VENDOR, DEVICE.ID.PRODUCT);
 
-  the_button.open();
-  var the_buttonInterface = the_button.interface(DEVICE.INTERFACE.NUM);
-  if (the_buttonInterface.isKernelDriverActive()) {
-    the_buttonInterface.detachKernelDriver();
-  }
-  console.log('Hello?');
-  the_buttonInterface.claim();
-  console.log('Hello?');
-  process.on('exit', function() {
-    the_button.close();
-    the_buttonInterface.release();
-  });
-  console.log('Hello?');
+    console.log(controllers);
 
-  var controller = {};
+    if (!controllers.length) {
+      throw new Error("No BigRedButton controllers could be found");
+    }
 
-  controller.listen = function() {
-    var data = 0;
-    the_button.timeout = DEVICE.REQ.TIMEOUT;
+    if (index > controllers.length || index < 0) {
+      throw new Error("Index " + index + " out of range, only " + controllers.length + " BigRedButton controllers found");
+    }
 
-    //the_button.transfer(8, data, function(error, data) {
-    the_button.controlTransfer(DEVICE.REQ.TYPE, DEVICE.REQ.REQ, DEVICE.REQ.VAL, 1, data, function(data) {
-      console.log('Polling result is: ');
+    events.EventEmitter.call(this);
+
+    console.log(controllers[index].path);
+    this.hid = new HID.HID(controllers[index].path);
+
+    // Start reading.
+    //this.hid.read(this.buzzerData.bind(this));
+    this.hid.read(function(error, data){
+      console.log(error);
       console.log(data);
-    });
-    console.log('Hello:');
-    console.log(data);
+    })
   }
-  console.log('Hello?');
 
-  controller.listen();
+  util.inherits(BigRedButtonController, events.EventEmitter);
 
-  module.exports = controller;
+  BigRedButtonController.prototype.handleBuzzer = function (buzzerNumber, bits)
+  {
+    var mask = 1 << (buzzerNumber * 5);
+    for (var buttonNumber = 0; buttonNumber < 5; buttonNumber++) {
+      var now = bits & mask;
+      var old = this.oldBits & mask;
+      if (old ^ now) {
+        this.emit('button', buzzerNumber, buttonNumber, now ? true : false);
+      }
+      mask <<= 1;
+    }
+  }
+
+  BigRedButtonController.prototype.buzzerData = function (error, data) {
+    console.log(data);
+    this.oldBits = bits;
+
+  }
+
+  module.exports = BigRedButtonController;
 })();
