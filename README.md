@@ -1,4 +1,3 @@
-
 Pre-requisites
 
 [usb big red button](http://www.dreamcheeky.com/big-red-button),
