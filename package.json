@@ -4,7 +4,8 @@
   "author": "James Silver <jamsilver@gmail.com>",
   "description": "nodejs driver for dream cheeky USB Big red button",
   "dependencies": {
-    "node-usb"  : "git://github.com/nonolith/node-usb.git#66e6b252f7de913c22d37f75b57f15140d8a69f0"
+    "usb"  : "0.2.3",
+    "udev"  : "0.1.0"
   },
   "license": "MIT",
   "engine": {
