@@ -30,8 +30,8 @@
         [lid]   [button]           vv
         CLOSED  PRESSED  0x14 = 10100
         CLOSED    UP     0x15 = 10101
-        OPENED   DOWN:   0x16 = 10110
-        OPENED    UP:    0x17 = 10111
+         OPEN    DOWN:   0x16 = 10110
+         OPEN     UP:    0x17 = 10111
      */
     STATE: {
       // So bit-wise ANDing is in order here.
@@ -60,19 +60,41 @@
    *
    */
   function ControllersDriver() {
-    events.EventEmitter.call(this);
 
     var self = this;
+    events.EventEmitter.call(self);
 
-    // Detect when the USB big red button is plugged in.
-    var udev_monitor = udev.monitor();
-    udev_monitor.on('add', function (device) {
-      if (device.hasOwnProperty('ID_VENDOR_ID') && (device.ID_VENDOR_ID == BIGREDBUTTON.ID.VENDOR_STRING)) {
-        self.checkForControllers();
-      }
+    // We put pretty much this entire constructor in a nextTick().
+    // This is so all of our code which searches for USB devices, and registers
+    // UDEV monitor callbacks will never attach before our caller has a chance
+    // to customize our configuration.
+    //
+    // This approach will make more sense on the day we *have* configuration!
+    process.nextTick(function() {
+
+      // Detect when the USB big red button is plugged in.
+      var udev_monitor = udev.monitor();
+      udev_monitor.on('add', function (device) {
+        if (device.hasOwnProperty('ID_VENDOR_ID') && (device.ID_VENDOR_ID == BIGREDBUTTON.ID.VENDOR_STRING)) {
+          self.checkForControllers();
+        }
+      });
+      udev_monitor.on('remove', function (device) {
+        if (device.hasOwnProperty('ID_VENDOR_ID') && (device.ID_VENDOR_ID == BIGREDBUTTON.ID.VENDOR_STRING)) {
+          console.log('REMOVE');
+        }
+      });
+      udev_monitor.on('change', function (device) {
+        if (device.hasOwnProperty('ID_VENDOR_ID') && (device.ID_VENDOR_ID == BIGREDBUTTON.ID.VENDOR_STRING)) {
+          console.log('CHANGE');
+        }
+      });
+      // (Don't THINK the 'remove' event is relevant for us).
+      // (Don't THINK the 'change' event is relevant for us).
+
+      // Check for buttons right away, in case any are already connected.
+      self.checkForControllers();
     });
-    // (Don't THINK the 'remove' event is relevant for us).
-    // (Don't THINK the 'change' event is relevant for us).
   }
   util.inherits(ControllersDriver, events.EventEmitter);
 
@@ -85,7 +107,7 @@
       var deviceDesc = devices[i].deviceDescriptor;
       if ((deviceDesc.idVendor == BIGREDBUTTON.ID.VENDOR) && (deviceDesc.idProduct == BIGREDBUTTON.ID.PRODUCT)) {
         if (!bigredbuttons.hasOwnProperty(devices[i].deviceAddress)) {
-          bigredbuttons[devices[i].deviceAddress] = new BigRedButtonControllerCompositeEventsDecorator(new BigRedButtonController(devices[i]));
+          bigredbuttons[devices[i].deviceAddress] = new BigRedButtonController(devices[i]);
           // Pass on the connected event.
           bigredbuttons[devices[i].deviceAddress].on('connected', function(controller) {
             self.emit('connected', controller);
@@ -110,28 +132,28 @@
    * @param buttonController
    * @constructor
    */
-  function BigRedButtonControllerCompositeEventsDecorator(buttonController) {
-
-    var self = this;
-    BigRedButtonController.call(self);
-
-    // Automatically pass-on every event.
-    var events = buttonController.ControllerEventNames();
-    events.push(buttonController.getDisconnectionEventName());
-    var length = events.length;
-    for (var i = 0; i < length; i++) {
-      var eventName = events[i];
-      buttonController.on(eventName, function(data) {
-
-        helper.quickSuccession('uniquename', 123, function() {
-
-        });
-
-        self.emit(eventName, data);
-      });
-    }
-  }
-  util.inherits(BigRedButtonControllerCompositeEventsDecorator, BigRedButtonController);
+//  function BigRedButtonControllerCompositeEventsDecorator(buttonController) {
+//
+//    var self = this;
+//    BigRedButtonController.call(self);
+//
+//    // Automatically pass-on every event.
+//    var events = buttonController.ControllerEventNames();
+//    events.push(buttonController.getDisconnectionEventName());
+//    var length = events.length;
+//    for (var i = 0; i < length; i++) {
+//      var eventName = events[i];
+//      buttonController.on(eventName, function(data) {
+//
+//        helper.quickSuccession('uniquename', 123, function() {
+//
+//        });
+//
+//        self.emit(eventName, data);
+//      });
+//    }
+//  }
+//  util.inherits(BigRedButtonControllerCompositeEventsDecorator, BigRedButtonController);
 
   /**
    *  CONTROLLER 'INTERFACE'
@@ -152,10 +174,22 @@
     var self = this;
     events.EventEmitter.call(self);
 
-
     self._usb_device = device;
 
-    device.open();
+    try {
+      device.open();
+    }
+    catch (error) {
+      console.log(error);
+      console.log(
+"  The Big Red Button was found, but there was an error opening it for \n" +
+"  communication. This is often because of insufficent permissions (try running \n" +
+"  this again as Administrator/sudo), or because the OS has already reserved \n" +
+"  this device elsewhere."
+      );
+      return;
+    }
+
     var device_interface = device.interface(0);
     if (device_interface.isKernelDriverActive()) {
       device_interface.detachKernelDriver();
@@ -175,7 +209,7 @@
     process.on('exit', function() {
       try {
         device_interface.release();
-        //device.close();
+        device.close();
       }
       catch (error) {}
     });
@@ -253,28 +287,6 @@
   BigRedButtonController.prototype.getUniqueID = function() {
     return this._usb_device.deviceAddress;
   }
-
-  /**
-   * BIG RED BUTTON DRIVER EVENTS:
-   *
-   *   'Controller' Events:
-   *     1. ButtonDown
-   *     2. ButtonUp
-   *     3. LidClosed
-   *     4. lidOpened
-   *
-   *
-   *     5. ButtonPress
-   *     6. ButtonDoublePress
-   *     7. ButtonLongPress
-   *     8. ButtonTreblePress
-   *
-   *   Other Events
-   *     1. Disconnected
-   *
-   *
-   * @type {*}
-   */
 
   module.exports = new ControllersDriver();
 })();
