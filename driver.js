@@ -12,7 +12,8 @@
    */
 
   var util = require("util");
-  var events = require("events")
+  var events = require("events");
+  var composite_events = require("composite-events");
   var udev = require("udev");
   var usb = require('usb/usb.js');
 
@@ -44,6 +45,7 @@
   // the system. If one is unplugged and re-plugged in we'll attempt to gloss
   // over the hiccup and keep on operating with it.
   var bigredbuttons = {};
+
 
   /**
    * CONTROLLERS DRIVER 'INTERFACE'
@@ -111,39 +113,6 @@
     }
   }
 
-  /**
-   * Wraps the 'proper' BigRedButtonController and takes care
-   * of the more complex 'composite events', such as:
-   *
-   *   double-press
-   *   triple-press
-   *   long-press
-   *
-   * @param buttonController
-   * @constructor
-   */
-//  function BigRedButtonControllerCompositeEventsDecorator(buttonController) {
-//
-//    var self = this;
-//    BigRedButtonController.call(self);
-//
-//    // Automatically pass-on every event.
-//    var events = buttonController.ControllerEventNames();
-//    events.push(buttonController.getDisconnectionEventName());
-//    var length = events.length;
-//    for (var i = 0; i < length; i++) {
-//      var eventName = events[i];
-//      buttonController.on(eventName, function(data) {
-//
-//        helper.quickSuccession('uniquename', 123, function() {
-//
-//        });
-//
-//        self.emit(eventName, data);
-//      });
-//    }
-//  }
-//  util.inherits(BigRedButtonControllerCompositeEventsDecorator, BigRedButtonController);
 
   /**
    *  CONTROLLER 'INTERFACE'
@@ -220,8 +189,8 @@
           0x21,       // 0 01 000001: 'host-to-device' 'class' 'interface'
           0x09,       // SET_REPORT
           0x0200,     // report type: OUTPUT
-          0,          // "wIndex is normally used to specify the referring interface
-          // for requests directed at the interface"
+          0,          // "wIndex is normally used to specify the referring
+                      // interface for requests directed at the interface"
           new Buffer([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02]),
           function() {
             try {
@@ -232,19 +201,19 @@
                   var lid_open_now = ((state & BIGREDBUTTON.STATE.LID_OPEN) === BIGREDBUTTON.STATE.LID_OPEN);
                   if (lid_open !== null) {
                     if (lid_open_now && !lid_open) {
-                      self.emit('lid-opened');
+                      self.emit('lid-opened', self);
                     }
                     if (!lid_open_now && lid_open) {
-                      self.emit('lid-closed');
+                      self.emit('lid-closed', self);
                     }
                   }
                   var button_up_now = ((state & BIGREDBUTTON.STATE.BUTTON_UP) === BIGREDBUTTON.STATE.BUTTON_UP);
                   if (button_up !== null) {
                     if (button_up_now && !button_up) {
-                      self.emit('button-up');
+                      self.emit('button-up', self);
                     }
                     if (!button_up_now && button_up) {
-                      self.emit('button-down');
+                      self.emit('button-down', self);
                     }
                   }
 
@@ -271,7 +240,7 @@
       listen.bind(self)();
     });
   }
-  util.inherits(BigRedButtonController, events.EventEmitter);
+  util.inherits(BigRedButtonController, composite_events.CompositeEventEmitter);
 
   // Get a unique ID for this controller.
   BigRedButtonController.prototype.getUniqueID = function() {

@@ -2,16 +2,16 @@ var bigRedButtonsDriver = require('./driver.js');
 bigRedButtonsDriver.on('connected', function(bigRedButtonController) {
   console.log('Button connected! ' + bigRedButtonController.getUniqueID());
 
-  bigRedButtonController.on('lid-opened', function() {
+  bigRedButtonController.on('lid-opened', function(controller, event) {
     console.log('LID opened');
   });
-  bigRedButtonController.on('lid-closed', function() {
+  bigRedButtonController.on('lid-closed', function(controller, event) {
     console.log('LID closed');
   });
-  bigRedButtonController.on('button-up', function() {
+  bigRedButtonController.on('button-up', function(controller, event) {
     console.log('BUTTON up');
   });
-  bigRedButtonController.on('button-down', function() {
+  bigRedButtonController.on('button-down', function(controller, event) {
     console.log('BUTTON down');
   });
 });
