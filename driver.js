@@ -79,16 +79,6 @@
           self.checkForControllers();
         }
       });
-      udev_monitor.on('remove', function (device) {
-        if (device.hasOwnProperty('ID_VENDOR_ID') && (device.ID_VENDOR_ID == BIGREDBUTTON.ID.VENDOR_STRING)) {
-          console.log('REMOVE');
-        }
-      });
-      udev_monitor.on('change', function (device) {
-        if (device.hasOwnProperty('ID_VENDOR_ID') && (device.ID_VENDOR_ID == BIGREDBUTTON.ID.VENDOR_STRING)) {
-          console.log('CHANGE');
-        }
-      });
       // (Don't THINK the 'remove' event is relevant for us).
       // (Don't THINK the 'change' event is relevant for us).
 
