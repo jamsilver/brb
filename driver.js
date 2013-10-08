@@ -29,10 +29,10 @@
       lid and the button respectively.
 
         [lid]   [button]           vv
-        CLOSED  PRESSED  0x14 = 10100
-        CLOSED    UP     0x15 = 10101
-         OPEN    DOWN:   0x16 = 10110
-         OPEN     UP:    0x17 = 10111
+        CLOSED    DOWN   0x14 = 10100
+        CLOSED     UP    0x15 = 10101
+         OPEN     DOWN   0x16 = 10110
+         OPEN      UP    0x17 = 10111
      */
     STATE: {
       // So bit-wise ANDing is in order here.
@@ -114,123 +114,6 @@
         }
       }
     }
-  }
-
-  /**
-   * Helper function which augments the basic four events with some extra
-   * compound ones.
-   *
-   * The basic four are:
-   *
-   *   - button-up
-   *   - button-down
-   *   - lid-up
-   *   - lid-down
-   *
-   * And we add in:
-   *
-   *   - button-tap
-   *   - button-long-press
-   *   - button-double-tap
-   *   - button-tap-press
-   */
-  function addBigRedButtonCompoundEvents(bigRedButton) {
-
-    var lastEmitted = {};
-    var longPressTimeoutID = null;
-
-    var longPressDuration = 666;
-    var standardDelay = 500;
-
-    // Augment getControllerEvents() result to declare our extra
-    // compound ones.
-    var originalgetControllerEvents = bigRedButton.getControllerEvents;
-    bigRedButton.getControllerEvents = function() {
-      var events = originalgetControllerEvents();
-      events['button-tap'] = {
-        label: 'Button tap'
-      };
-      events['button-long-press'] = {
-        label: 'Button long-press'
-      };
-      events['button-double-tap'] = {
-        label: 'Button double-tap'
-      };
-      events['button-tap-press'] = {
-        label: 'Button tap-press'
-      };
-      return events;
-    }
-
-    // Annnd now actually make em happen.
-
-    // BUTTON DOWN might cause LONG PRESS
-    bigRedButton.on('button-down', function() {
-      lastEmitted['button-down'] = new Date();
-      longPressTimeoutID = setTimeout(function() {
-        bigRedButton.emit('button-long-press', {
-          uuid: uuid.v4()
-        });
-      }, longPressDuration);
-    });
-
-    bigRedButton.on('disconnected', function() {
-      if (longPressTimeoutID !== null) {
-        clearTimeout(longPressTimeoutID);
-        longPressTimeoutID = null;
-      }
-    });
-
-
-    // BUTTON UP might cause BUTTON TAB (& cancels long press... maybe)
-    bigRedButton.on('button-up', function() {
-      if (longPressTimeoutID !== null) {
-        clearTimeout(longPressTimeoutID);
-        longPressTimeoutID = null;
-      }
-      if (lastEmitted['button-down'] && ((!lastEmitted['button-long-press']) || (lastEmitted['button-long-press'] < lastEmitted['button-down']))) {
-        process.nextTick(function() {
-          bigRedButton.emit('button-tap', {
-            uuid: uuid.v4()
-          });
-        });
-      }
-    });
-
-    // BUTTON TAP might cause BUTTON DOUBLE TAP.
-    bigRedButton.on('button-tap', function() {
-      if (lastEmitted['button-tap'] && (new Date() - lastEmitted['button-tap']) < standardDelay) {
-        if ((!lastEmitted['button-double-tap']) || (new Date() - lastEmitted['button-double-tap']) > standardDelay) {
-          process.nextTick(function() {
-            bigRedButton.emit('button-double-tap', {
-              uuid: uuid.v4()
-            });
-          });
-        }
-        else {
-          // This is hacky..
-          lastEmitted['button-double-tap'] = new Date();
-        }
-      }
-      lastEmitted['button-tap'] = new Date();
-    });
-
-    // BUTTON LONG PRESS might cause a tap-press
-    bigRedButton.on('button-long-press', function() {
-      lastEmitted['button-long-press'] = new Date();
-      if (lastEmitted['button-tap'] && (new Date() - lastEmitted['button-tap']) < (longPressDuration + standardDelay)) {
-        process.nextTick(function() {
-          bigRedButton.emit('button-tap-press', {
-            uuid: uuid.v4()
-          });
-        });
-      }
-    });
-
-    // BUTTON DOUBLE TAB
-    bigRedButton.on('button-double-tap', function() {
-      lastEmitted['button-double-tap'] = new Date();
-    });
   }
 
 
@@ -407,6 +290,123 @@
    */
   BigRedButtonController.prototype.getDisconnectionEventName = function() {
     return 'disconnected';
+  }
+
+  /**
+   * Helper function which augments the basic four events with some extra
+   * compound ones.
+   *
+   * The basic four are:
+   *
+   *   - button-up
+   *   - button-down
+   *   - lid-up
+   *   - lid-down
+   *
+   * And we add in:
+   *
+   *   - button-tap
+   *   - button-long-press
+   *   - button-double-tap
+   *   - button-tap-press
+   */
+  function addBigRedButtonCompoundEvents(bigRedButton) {
+
+    var lastEmitted = {};
+    var longPressTimeoutID = null;
+
+    var longPressDuration = 666;
+    var standardDelay = 500;
+
+    // Augment getControllerEvents() result to declare our extra
+    // compound ones.
+    var originalgetControllerEvents = bigRedButton.getControllerEvents;
+    bigRedButton.getControllerEvents = function() {
+      var events = originalgetControllerEvents();
+      events['button-tap'] = {
+        label: 'Button tap'
+      };
+      events['button-long-press'] = {
+        label: 'Button long-press'
+      };
+      events['button-double-tap'] = {
+        label: 'Button double-tap'
+      };
+      events['button-tap-press'] = {
+        label: 'Button tap-press'
+      };
+      return events;
+    }
+
+    // Annnd now actually make em happen.
+
+    // BUTTON DOWN might cause LONG PRESS
+    bigRedButton.on('button-down', function() {
+      lastEmitted['button-down'] = new Date();
+      longPressTimeoutID = setTimeout(function() {
+        bigRedButton.emit('button-long-press', {
+          uuid: uuid.v4()
+        });
+      }, longPressDuration);
+    });
+
+    bigRedButton.on('disconnected', function() {
+      if (longPressTimeoutID !== null) {
+        clearTimeout(longPressTimeoutID);
+        longPressTimeoutID = null;
+      }
+    });
+
+
+    // BUTTON UP might cause BUTTON TAB (& cancels long press... maybe)
+    bigRedButton.on('button-up', function() {
+      if (longPressTimeoutID !== null) {
+        clearTimeout(longPressTimeoutID);
+        longPressTimeoutID = null;
+      }
+      if (lastEmitted['button-down'] && ((!lastEmitted['button-long-press']) || (lastEmitted['button-long-press'] < lastEmitted['button-down']))) {
+        process.nextTick(function() {
+          bigRedButton.emit('button-tap', {
+            uuid: uuid.v4()
+          });
+        });
+      }
+    });
+
+    // BUTTON TAP might cause BUTTON DOUBLE TAP.
+    bigRedButton.on('button-tap', function() {
+      if (lastEmitted['button-tap'] && (new Date() - lastEmitted['button-tap']) < standardDelay) {
+        if ((!lastEmitted['button-double-tap']) || (new Date() - lastEmitted['button-double-tap']) > standardDelay) {
+          process.nextTick(function() {
+            bigRedButton.emit('button-double-tap', {
+              uuid: uuid.v4()
+            });
+          });
+        }
+        else {
+          // This is hacky..
+          lastEmitted['button-double-tap'] = new Date();
+        }
+      }
+      lastEmitted['button-tap'] = new Date();
+    });
+
+    // BUTTON LONG PRESS might cause a tap-press
+    bigRedButton.on('button-long-press', function() {
+      lastEmitted['button-long-press'] = new Date();
+      if (lastEmitted['button-tap'] && (new Date() - lastEmitted['button-tap']) < (longPressDuration + standardDelay)) {
+        process.nextTick(function() {
+          bigRedButton.emit('button-tap-press', {
+            uuid: uuid.v4()
+          });
+        });
+      }
+    });
+
+    // BUTTON DOUBLE TAB
+    bigRedButton.on('button-double-tap', function() {
+      lastEmitted['button-double-tap'] = new Date();
+    });
   }
 
   module.exports = new ControllersDriver();
