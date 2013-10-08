@@ -13,7 +13,7 @@
 
   var util = require("util");
   var events = require("events");
-  var composite_events = require("composite-events");
+  //var composite_events = require("composite-events");
   var udev = require("udev");
   var usb = require('usb/usb.js');
 
@@ -94,23 +94,127 @@
   ControllersDriver.prototype.checkForControllers = function() {
     var self = this;
 
-    var devices = usb.getDeviceList()
+    var devices = usb.getDeviceList();
     for (var i = 0; i < devices.length; i++) {
       var deviceDesc = devices[i].deviceDescriptor;
       if ((deviceDesc.idVendor == BIGREDBUTTON.ID.VENDOR) && (deviceDesc.idProduct == BIGREDBUTTON.ID.PRODUCT)) {
         if (!bigredbuttons.hasOwnProperty(devices[i].deviceAddress)) {
           bigredbuttons[devices[i].deviceAddress] = new BigRedButtonController(devices[i]);
+          addBigRedButtonCompoundEvents(bigredbuttons[devices[i].deviceAddress]);
           // Pass on the connected event.
-          bigredbuttons[devices[i].deviceAddress].on('connected', function(controller) {
-            self.emit('connected', controller);
-          });
-          // Pass on the disconnected event.
-          bigredbuttons[devices[i].deviceAddress].on('disconnected', function(controller) {
-            self.emit('disconnected', controller);
-          });
+          (function(button) {
+            button.on('connected', function() {
+              self.emit('connected', button);
+            });
+            // Pass on the disconnected event.
+            button.on('disconnected', function() {
+              self.emit('disconnected', button);
+            });
+          })(bigredbuttons[devices[i].deviceAddress]);
         }
       }
     }
+  }
+
+  /**
+   * Helper function which augments the basic four events with some extra
+   * compound ones.
+   *
+   * The basic four are:
+   *
+   *   - button-up
+   *   - button-down
+   *   - lid-up
+   *   - lid-down
+   *
+   * And we add in:
+   *
+   *   - button-tap
+   *   - button-long-press
+   *   - button-double-tap
+   *   - button-tap-press
+   */
+  function addBigRedButtonCompoundEvents(bigRedButton) {
+
+    var lastEmitted = {};
+    var longPressTimeoutID = null;
+
+    var longPressDuration = 666;
+    var standardDelay = 500;
+
+    // Augment getControllerEvents() result to declare our extra
+    // compound ones.
+    var originalgetControllerEvents = bigRedButton.getControllerEvents;
+    bigRedButton.getControllerEvents = function() {
+      var events = originalgetControllerEvents();
+      events['button-tap'] = {
+        label: 'Button tap'
+      };
+      events['button-long-press'] = {
+        label: 'Button long-press'
+      };
+      events['button-double-tap'] = {
+        label: 'Button double-tap'
+      };
+      events['button-tap-press'] = {
+        label: 'Button tap-press'
+      };
+      return events;
+    }
+
+    // Annnd now actually make em happen.
+
+    // BUTTON DOWN might cause LONG PRESS
+    bigRedButton.on('button-down', function() {
+      lastEmitted['button-down'] = new Date();
+      longPressTimeoutID = setTimeout(function() {
+        bigRedButton.emit('button-long-press');
+      }, longPressDuration);
+    });
+
+    // BUTTON UP might cause BUTTON TAB (& cancels long press... maybe)
+    bigRedButton.on('button-up', function() {
+      if (longPressTimeoutID !== null) {
+        clearTimeout(longPressTimeoutID);
+        longPressTimeoutID = null;
+      }
+      if (lastEmitted['button-down'] && ((!lastEmitted['button-long-press']) || (lastEmitted['button-long-press'] < lastEmitted['button-down']))) {
+        process.nextTick(function() {
+          bigRedButton.emit('button-tap');
+        });
+      }
+    });
+
+    // BUTTON TAP might cause BUTTON DOUBLE TAP.
+    bigRedButton.on('button-tap', function() {
+      if (lastEmitted['button-tap'] && (new Date() - lastEmitted['button-tap']) < standardDelay) {
+        if ((!lastEmitted['button-double-tap']) || (new Date() - lastEmitted['button-double-tap']) > standardDelay) {
+          process.nextTick(function() {
+            bigRedButton.emit('button-double-tap');
+          });
+        }
+        else {
+          // This is hacky..
+          lastEmitted['button-double-tap'] = new Date();
+        }
+      }
+      lastEmitted['button-tap'] = new Date();
+    });
+
+    // BUTTON LONG PRESS might cause a tap-press
+    bigRedButton.on('button-long-press', function() {
+      lastEmitted['button-long-press'] = new Date();
+      if (lastEmitted['button-tap'] && (new Date() - lastEmitted['button-tap']) < (longPressDuration + standardDelay)) {
+        process.nextTick(function() {
+          bigRedButton.emit('button-tap-press');
+        });
+      }
+    });
+
+    // BUTTON DOUBLE TAB
+    bigRedButton.on('button-double-tap', function() {
+      lastEmitted['button-double-tap'] = new Date();
+    });
   }
 
 
@@ -124,7 +228,7 @@
    *    <whatever>
    *
    *  METHODS
-   *    1. getControllerEventNames()
+   *    1. getControllerEvents()
    *    2. getDisconnectionEventName()
    *    2. getUniqueID()
    *
@@ -174,7 +278,7 @@
     });
 
     process.nextTick(function() {
-      self.emit('connected', self);
+      self.emit('connected');
     });
 
     var lid_open = null;
@@ -201,19 +305,19 @@
                   var lid_open_now = ((state & BIGREDBUTTON.STATE.LID_OPEN) === BIGREDBUTTON.STATE.LID_OPEN);
                   if (lid_open !== null) {
                     if (lid_open_now && !lid_open) {
-                      self.emit('lid-opened', self);
+                      self.emit('lid-up');
                     }
                     if (!lid_open_now && lid_open) {
-                      self.emit('lid-closed', self);
+                      self.emit('lid-down');
                     }
                   }
                   var button_up_now = ((state & BIGREDBUTTON.STATE.BUTTON_UP) === BIGREDBUTTON.STATE.BUTTON_UP);
                   if (button_up !== null) {
                     if (button_up_now && !button_up) {
-                      self.emit('button-up', self);
+                      self.emit('button-up');
                     }
                     if (!button_up_now && button_up) {
-                      self.emit('button-down', self);
+                      self.emit('button-down');
                     }
                   }
 
@@ -232,7 +336,7 @@
         );
       }
       catch (error) {
-        self.emit('disconnected', self);
+        self.emit('disconnected');
       }
     }
 
@@ -240,11 +344,45 @@
       listen.bind(self)();
     });
   }
-  util.inherits(BigRedButtonController, composite_events.CompositeEventEmitter);
+  util.inherits(BigRedButtonController, events.EventEmitter);
 
-  // Get a unique ID for this controller.
+
+  /**
+   * Return a unique ID.
+   *
+   * @return {*}
+   */
   BigRedButtonController.prototype.getUniqueID = function() {
     return this._usb_device.deviceAddress;
+  }
+
+
+  /**
+   * We declare which of our events represent controller interactions.
+   */
+  BigRedButtonController.prototype.getControllerEvents = function() {
+    return {
+      'button-up': {
+        label: 'Button up'
+      },
+      'button-down': {
+        label: 'Button down'
+      },
+      'lid-up': {
+        label: 'Lid up'
+      },
+      'lid-down': {
+        label: 'Lid down'
+      }
+    }
+  }
+
+
+  /**
+   * Which of our events is emitted on disconnection of the Big Red Button.
+   */
+  BigRedButtonController.prototype.getDisconnectionEventName = function() {
+    return 'disconnected';
   }
 
   module.exports = new ControllersDriver();

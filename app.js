@@ -1,22 +1,22 @@
 var bigRedButtonsDriver = require('./driver.js');
+
 bigRedButtonsDriver.on('connected', function(bigRedButtonController) {
   console.log('Button connected! ' + bigRedButtonController.getUniqueID());
 
-  bigRedButtonController.on('lid-opened', function(controller, event) {
-    console.log('LID opened');
-  });
-  bigRedButtonController.on('lid-closed', function(controller, event) {
-    console.log('LID closed');
-  });
-  bigRedButtonController.on('button-up', function(controller, event) {
-    console.log('BUTTON up');
-  });
-  bigRedButtonController.on('button-down', function(controller, event) {
-    console.log('BUTTON down');
-  });
+  var controllerEvents = bigRedButtonController.getControllerEvents();
+  for (var event_name in controllerEvents) {
+    if (controllerEvents.hasOwnProperty(event_name)) {
+      (function(event_name, event){
+        bigRedButtonController.on(event_name, function() {
+          console.log(event.label);
+        });
+      })(event_name, controllerEvents[event_name]);
+    }
+  }
 });
-bigRedButtonsDriver.on('disconnected', function(bigRedButtonController) {
-  console.log('Button disconnected! ' + bigRedButtonController.getUniqueID());
+
+bigRedButtonsDriver.on('disconnected', function() {
+  console.log('Button disconnected! ' + this.getUniqueID());
 });
 
 
