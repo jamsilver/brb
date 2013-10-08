@@ -13,9 +13,9 @@
 
   var util = require("util");
   var events = require("events");
-  //var composite_events = require("composite-events");
   var udev = require("udev");
   var usb = require('usb/usb.js');
+  var uuid = require('node-uuid');
 
   // Some useful constants.
   var BIGREDBUTTON = {
@@ -168,9 +168,19 @@
     bigRedButton.on('button-down', function() {
       lastEmitted['button-down'] = new Date();
       longPressTimeoutID = setTimeout(function() {
-        bigRedButton.emit('button-long-press');
+        bigRedButton.emit('button-long-press', {
+          uuid: uuid.v4()
+        });
       }, longPressDuration);
     });
+
+    bigRedButton.on('disconnected', function() {
+      if (longPressTimeoutID !== null) {
+        clearTimeout(longPressTimeoutID);
+        longPressTimeoutID = null;
+      }
+    });
+
 
     // BUTTON UP might cause BUTTON TAB (& cancels long press... maybe)
     bigRedButton.on('button-up', function() {
@@ -180,7 +190,9 @@
       }
       if (lastEmitted['button-down'] && ((!lastEmitted['button-long-press']) || (lastEmitted['button-long-press'] < lastEmitted['button-down']))) {
         process.nextTick(function() {
-          bigRedButton.emit('button-tap');
+          bigRedButton.emit('button-tap', {
+            uuid: uuid.v4()
+          });
         });
       }
     });
@@ -190,7 +202,9 @@
       if (lastEmitted['button-tap'] && (new Date() - lastEmitted['button-tap']) < standardDelay) {
         if ((!lastEmitted['button-double-tap']) || (new Date() - lastEmitted['button-double-tap']) > standardDelay) {
           process.nextTick(function() {
-            bigRedButton.emit('button-double-tap');
+            bigRedButton.emit('button-double-tap', {
+              uuid: uuid.v4()
+            });
           });
         }
         else {
@@ -206,7 +220,9 @@
       lastEmitted['button-long-press'] = new Date();
       if (lastEmitted['button-tap'] && (new Date() - lastEmitted['button-tap']) < (longPressDuration + standardDelay)) {
         process.nextTick(function() {
-          bigRedButton.emit('button-tap-press');
+          bigRedButton.emit('button-tap-press', {
+            uuid: uuid.v4()
+          });
         });
       }
     });
@@ -305,19 +321,27 @@
                   var lid_open_now = ((state & BIGREDBUTTON.STATE.LID_OPEN) === BIGREDBUTTON.STATE.LID_OPEN);
                   if (lid_open !== null) {
                     if (lid_open_now && !lid_open) {
-                      self.emit('lid-up');
+                      self.emit('lid-up', {
+                        uuid: uuid.v4()
+                      });
                     }
                     if (!lid_open_now && lid_open) {
-                      self.emit('lid-down');
+                      self.emit('lid-down', {
+                        uuid: uuid.v4()
+                      });
                     }
                   }
                   var button_up_now = ((state & BIGREDBUTTON.STATE.BUTTON_UP) === BIGREDBUTTON.STATE.BUTTON_UP);
                   if (button_up !== null) {
                     if (button_up_now && !button_up) {
-                      self.emit('button-up');
+                      self.emit('button-up', {
+                        uuid: uuid.v4()
+                      });
                     }
                     if (!button_up_now && button_up) {
-                      self.emit('button-down');
+                      self.emit('button-down', {
+                        uuid: uuid.v4()
+                      });
                     }
                   }
 

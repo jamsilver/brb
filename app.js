@@ -15,8 +15,8 @@ bigRedButtonsDriver.on('connected', function(bigRedButtonController) {
   }
 });
 
-bigRedButtonsDriver.on('disconnected', function() {
-  console.log('Button disconnected! ' + this.getUniqueID());
+bigRedButtonsDriver.on('disconnected', function(bigRedButtonController) {
+  console.log('Button disconnected! ' + bigRedButtonController.getUniqueID());
 });
 
 
