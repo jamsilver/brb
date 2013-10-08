@@ -205,12 +205,16 @@
                   if (lid_open !== null) {
                     if (lid_open_now && !lid_open) {
                       self.emit('lid-up', {
-                        uuid: uuid.v4()
+                        name: 'lid-up',
+                        uuid: uuid.v4(),
+                        time: new Date()
                       });
                     }
                     if (!lid_open_now && lid_open) {
                       self.emit('lid-down', {
-                        uuid: uuid.v4()
+                        name: 'lid-down',
+                        uuid: uuid.v4(),
+                        time: new Date()
                       });
                     }
                   }
@@ -218,12 +222,16 @@
                   if (button_up !== null) {
                     if (button_up_now && !button_up) {
                       self.emit('button-up', {
-                        uuid: uuid.v4()
+                        name: 'button-up',
+                        uuid: uuid.v4(),
+                        time: new Date()
                       });
                     }
                     if (!button_up_now && button_up) {
                       self.emit('button-down', {
-                        uuid: uuid.v4()
+                        name: 'button-down',
+                        uuid: uuid.v4(),
+                        time: new Date()
                       });
                     }
                   }
@@ -309,9 +317,15 @@
    *   - button-long-press
    *   - button-double-tap
    *   - button-tap-press
+   *
+   * Note that every compound event passes on full details of the events which
+   * it comprises (including uuids). This is to facilitate calling code which
+   * would need to undo / disregard a previous event in view of it transpiring
+   * as part of a longer compound event.
    */
   function addBigRedButtonCompoundEvents(bigRedButton) {
 
+    // Record of past events.
     var lastEmitted = {};
     var longPressTimeoutID = null;
 
@@ -341,16 +355,24 @@
     // Annnd now actually make em happen.
 
     // BUTTON DOWN might cause LONG PRESS
-    bigRedButton.on('button-down', function() {
-      lastEmitted['button-down'] = new Date();
+    bigRedButton.on('button-down', function(context) {
+      lastEmitted['button-down'] = context;
       longPressTimeoutID = setTimeout(function() {
         bigRedButton.emit('button-long-press', {
-          uuid: uuid.v4()
+          name: 'button-long-press',
+          uuid: uuid.v4(),
+          time: new Date(),
+          comprises: [{
+            name: 'button-down',
+            uuid: context.uuid,
+            time: context.time,
+            comprises: context.comprises || []
+          }]
         });
       }, longPressDuration);
     });
 
-    bigRedButton.on('disconnected', function() {
+    bigRedButton.on('disconnected', function(context) {
       if (longPressTimeoutID !== null) {
         clearTimeout(longPressTimeoutID);
         longPressTimeoutID = null;
@@ -359,53 +381,92 @@
 
 
     // BUTTON UP might cause BUTTON TAB (& cancels long press... maybe)
-    bigRedButton.on('button-up', function() {
+    bigRedButton.on('button-up', function(context) {
       if (longPressTimeoutID !== null) {
         clearTimeout(longPressTimeoutID);
         longPressTimeoutID = null;
       }
-      if (lastEmitted['button-down'] && ((!lastEmitted['button-long-press']) || (lastEmitted['button-long-press'] < lastEmitted['button-down']))) {
+      if (lastEmitted['button-down'] && ((!lastEmitted['button-long-press']) || (lastEmitted['button-long-press'].time < lastEmitted['button-down'].time))) {
         process.nextTick(function() {
           bigRedButton.emit('button-tap', {
-            uuid: uuid.v4()
+            name: 'button-tap',
+            uuid: uuid.v4(),
+            time: new Date(),
+            comprises: [{
+              name: 'button-down',
+              uuid: lastEmitted['button-down'].uuid,
+              time: lastEmitted['button-down'].time,
+              comprises: lastEmitted['button-down'].comprises || []
+            },{
+              name: 'button-up',
+              uuid: context.uuid,
+              time: context.time,
+              comprises: context.comprises || []
+            }]
           });
         });
       }
     });
 
     // BUTTON TAP might cause BUTTON DOUBLE TAP.
-    bigRedButton.on('button-tap', function() {
-      if (lastEmitted['button-tap'] && (new Date() - lastEmitted['button-tap']) < standardDelay) {
-        if ((!lastEmitted['button-double-tap']) || (new Date() - lastEmitted['button-double-tap']) > standardDelay) {
+    bigRedButton.on('button-tap', function(context) {
+      if (lastEmitted['button-tap'] && (new Date() - lastEmitted['button-tap'].time) < standardDelay) {
+        if ((!lastEmitted['button-double-tap']) || (new Date() - lastEmitted['button-double-tap'].time) > standardDelay) {
           process.nextTick(function() {
             bigRedButton.emit('button-double-tap', {
-              uuid: uuid.v4()
+              name: 'button-double-tap',
+              uuid: uuid.v4(),
+              time: new Date(),
+              comprises: [{
+                name: 'button-tap',
+                uuid: lastEmitted['button-tap'].uuid,
+                time: lastEmitted['button-tap'].time,
+                comprises: lastEmitted['button-tap'].comprises || []
+              },{
+                name: 'button-tap',
+                uuid: context.uuid,
+                time: context.time,
+                comprises: context.comprises || []
+              }]
             });
           });
         }
         else {
           // This is hacky..
-          lastEmitted['button-double-tap'] = new Date();
+          lastEmitted['button-double-tap'].time = new Date();
         }
       }
-      lastEmitted['button-tap'] = new Date();
+      lastEmitted['button-tap'] = context;
     });
 
     // BUTTON LONG PRESS might cause a tap-press
-    bigRedButton.on('button-long-press', function() {
-      lastEmitted['button-long-press'] = new Date();
-      if (lastEmitted['button-tap'] && (new Date() - lastEmitted['button-tap']) < (longPressDuration + standardDelay)) {
+    bigRedButton.on('button-long-press', function(context) {
+      lastEmitted['button-long-press'] = context;
+      if (lastEmitted['button-tap'] && (new Date() - lastEmitted['button-tap'].time) < (longPressDuration + standardDelay)) {
         process.nextTick(function() {
           bigRedButton.emit('button-tap-press', {
-            uuid: uuid.v4()
+            name: 'button-tap-press',
+            uuid: uuid.v4(),
+            time: new Date(),
+            comprises: [{
+              name: 'button-tap',
+              uuid: lastEmitted['button-tap'].uuid,
+              time: lastEmitted['button-tap'].time,
+              comprises: lastEmitted['button-tap'].comprises || []
+            },{
+              name: 'button-long-press',
+              uuid: context.uuid,
+              time: context.time,
+              comprises: context.comprises || []
+            }]
           });
         });
       }
     });
 
     // BUTTON DOUBLE TAB
-    bigRedButton.on('button-double-tap', function() {
-      lastEmitted['button-double-tap'] = new Date();
+    bigRedButton.on('button-double-tap', function(context) {
+      lastEmitted['button-double-tap'] = context;
     });
   }
 

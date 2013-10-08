@@ -1,4 +1,5 @@
 var bigRedButtonsDriver = require('./driver.js');
+var util = require("util");
 
 bigRedButtonsDriver.on('connected', function(bigRedButtonController) {
   console.log('Button connected! ' + bigRedButtonController.getUniqueID());
@@ -7,8 +8,11 @@ bigRedButtonsDriver.on('connected', function(bigRedButtonController) {
   for (var event_name in controllerEvents) {
     if (controllerEvents.hasOwnProperty(event_name)) {
       (function(event_name, event){
-        bigRedButtonController.on(event_name, function() {
+        bigRedButtonController.on(event_name, function(context) {
           console.log(event.label);
+          if (event_name == 'button-tap-press') {
+            console.log(util.inspect(context, 100, 100));
+          }
         });
       })(event_name, controllerEvents[event_name]);
     }
